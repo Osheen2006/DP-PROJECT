@@ -1,1 +1,87 @@
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QLabel, QToolBar, QPushButton,
+    QWidget, QVBoxLayout, QAction
+)
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve
+
+# --- Import your actual main page ---
+from main import DRDOGUI   # make sure main_page.py has a class named MainPage(QMainWindow)
+
+
+class StartWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Welding Defect Detection System")
+        self.setGeometry(50, 100, 3000, 950)
+        self.setStyleSheet("background-color: #AFC9DE;")
+
+        # upper Toolbar
+        toolbar = QToolBar("Toolbar")
+        toolbar.setStyleSheet("""
+            QToolBar {
+                background-color: #AFC9DE;
+                spacing: 12 px;
+                padding: 6 px;
+            }
+            QToolButton {
+                color: black;
+                font-weight: bold;
+                font-size: 14 px;
+                padding: 5 px 12 px;
+            }
+            QToolButton:hover {
+                background-color: white;
+            }
+        """)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+
+        #Toolbar actions 
+        sections = ["File", "Edit", "View", "Tools", "Help"]
+        for name in sections:
+            action = QAction(name, self)
+            toolbar.addAction(action)
+
+        toolbar.addSeparator()
+
+        detect_btn = QPushButton("Detect Defect")
+        detect_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4cd137;
+                color: blacks;
+                font-weight: bold;
+                border-radius: 6 px;
+                padding: 6 px 16 px;
+            }
+            QPushButton:hover {
+                background-color: #AFC9DE;
+            }
+        """)
+        detect_btn.clicked.connect(self.open_main_page)
+        toolbar.addWidget(detect_btn)
+
+        # --- Central logo area ---
+        central_widget = QWidget()
+        layout = QVBoxLayout(central_widget)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.logo_label = QLabel()
+        self.logo_label.setPixmap(QPixmap("drdologo.webp").scaled(300, 300, Qt.AspectRatioMode.KeepAspectRatio))
+        self.logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.logo_label)
+
+        self.setCentralWidget(central_widget)
+
+    def open_main_page(self):
+        self.main_window = DRDOGUI()
+        self.main_window.show()
+        self.close()
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = StartWindow()
+    window.show()
+    sys.exit(app.exec())
 
