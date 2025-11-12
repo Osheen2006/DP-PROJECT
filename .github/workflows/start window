@@ -1,22 +1,21 @@
 import sys
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QLabel, QToolBar, QPushButton,
-    QWidget, QVBoxLayout, QAction, QHBoxLayout, QFrame
+    QApplication, QMainWindow, QLabel,
+    QWidget, QVBoxLayout, QFrame
 )
-from PyQt5.QtGui import QPixmap, QFont, QPalette, QLinearGradient, QColor, QBrush
-from PyQt5.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
+from PyQt5.QtGui import QPixmap, QFont, QPalette, QLinearGradient, QColor, QBrush, QMovie
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve
 
-from main import DRDOGUI  # ensure this exists
-
+from main import DRDOGUI 
 
 class StartWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Welding Defect Detection System")
-        self.setGeometry(50, 100, 1500, 900)
+        self.setWindowTitle("Welding Defect Detection System - Loading")
+        self.setGeometry(50, 100, 1700, 1000)
         self.setMinimumSize(1200, 700)
 
-        # gradient background
+        # Gradient background
         palette = QPalette()
         gradient = QLinearGradient(0, 0, 80, 900)
         gradient.setColorAt(0.0, QColor("#AFCEE8"))
@@ -24,53 +23,7 @@ class StartWindow(QMainWindow):
         palette.setBrush(QPalette.Window, QBrush(gradient))
         self.setPalette(palette)
 
-        # Toolbar
-        toolbar = QToolBar("Toolbar")
-        toolbar.setStyleSheet("""
-            QToolBar {
-                background-color: rgba(255, 255, 255, 0.7);
-                spacing: 10px;
-                padding: 8px;
-                border: none;
-            }
-            QToolButton {
-                color: #222;
-                font-weight: 600;
-                font-size: 15px;
-                padding: 6px 14px;
-            }
-            QToolButton:hover {
-                background-color: rgba(200, 200, 200, 0.3);
-                border-radius: 5px;
-            }
-        """)
-        self.addToolBar(Qt.TopToolBarArea, toolbar)
-
-        sections = ["File", "extra option", "Make report", "Tools", "Help"]
-        for name in sections:
-            toolbar.addAction(QAction(name, self))
-
-        toolbar.addSeparator()
-
-        detect_btn = QPushButton("Launch Detector")
-        detect_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0066cc;
-                color: white;
-                font-weight: bold;
-                border-radius: 8px;
-                padding: 8px 18px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #3385ff;
-                transform: scale(1.03);
-            }
-        """)
-        detect_btn.clicked.connect(self.open_main_page)
-        toolbar.addWidget(detect_btn)
-
-        # Central area
+        # Central widget
         central_widget = QWidget()
         layout = QVBoxLayout(central_widget)
         layout.setAlignment(Qt.AlignCenter)
@@ -79,10 +32,10 @@ class StartWindow(QMainWindow):
         card = QFrame()
         card.setStyleSheet("""
             QFrame {
-                background-color: rgba(255, 255, 255, 0.2);
-                border-radius: 80px;
+                background-color: rgba(255, 255, 255, 0.25);
+                border-radius: 60px;
                 padding: 40px;
-                border: 0px solid rgba(0, 0, 0, 1.8);
+                border: 1px solid rgba(0, 0, 0, 0.1);
             }
         """)
         card_layout = QVBoxLayout(card)
@@ -90,37 +43,37 @@ class StartWindow(QMainWindow):
 
         # Logo
         self.logo_label = QLabel()
-        pixmap = QPixmap("drdologo.webp")
-        self.logo_label.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        pixmap = QPixmap("C:\\Users\\hiosh\\Downloads\\Microsoft VS Code\\DP project\\drdologo2.png")
+        self.logo_label.setPixmap(pixmap.scaled(250, 250, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         self.logo_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.logo_label)
 
         # Title
         title = QLabel("Welding Defect Detection System")
-        title.setFont(QFont("Segoe UI", 28, QFont.Bold))
+        title.setFont(QFont("Segoe UI", 26, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #0C2340;")
+        title.setStyleSheet("color: #0C2340; margin-top: 10px;")
+        layout.addWidget(title)
 
-        # Subtitle
-        subtitle = QLabel("Desktop GUI for Welding Defect Detection")
-        subtitle.setFont(QFont("Segoe UI", 14))
-        subtitle.setStyleSheet("color: #333;")
-        subtitle.setAlignment(Qt.AlignCenter)
-
-        card_layout.addWidget(self.logo_label)
-        card_layout.addWidget(title)
-        card_layout.addWidget(subtitle)
-
-        layout.addWidget(card)
-
-        # Footer
-        footer = QLabel("DRDO Project")
-        footer.setAlignment(Qt.AlignRight)
-        footer.setStyleSheet("color: #444; font-size: 12px; margin-top: 40px;")
-
-        layout.addWidget(footer)
+                
+        # Loading GIF
+        self.loading_label = QLabel()
+        self.loading_label.setAlignment(Qt.AlignCenter)
+        self.loading_movie = QMovie("C:\\Users\\hiosh\\OneDrive\\Desktop\\loading gif.gif")  # <-- your GIF file here
+        self.loading_movie.setScaledSize(QPixmap("C:\\Users\\hiosh\\OneDrive\\Desktop\\loading gif.gif").size())
+        self.loading_label.setMovie(self.loading_movie)
+        self.loading_movie.start()
+        layout.addWidget(self.loading_label)
+        
         self.setCentralWidget(central_widget)
 
-  
+        
+
+   
+
+        # Timer for transition
+        QTimer.singleShot(6000, self.open_main_page)  # auto open after 4 seconds
+
     def open_main_page(self):
         self.main_window = DRDOGUI()
         self.main_window.show()
