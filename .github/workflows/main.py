@@ -1,6 +1,9 @@
 import sys
 import os
 import json 
+import random
+from PyQt5.QtGui import QPainter, QColor
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel,
     QFileDialog, QVBoxLayout, QWidget, QGridLayout, QScrollArea,
@@ -8,9 +11,11 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal
+from report_generator import generate_report, open_reports_folder
 
-# Import PIL/Pillow for image processing and metadata
-# This must be installed: pip install Pillow
+from models import SegmentationModels
+
+
 from PIL import Image 
 
 # Custom QLabel that emits a signal when clicked
@@ -25,15 +30,23 @@ class ClickableLabel(QLabel):
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self.path)
 
-
-class DRDOGUI(QMainWindow):
-    # File to store the application state
-    SAVE_FILE = "app_state.json"
     
+class DRDOGUI(QMainWindow):
+    SAVE_FILE = "app_state.json"
+
+    def handle_generate_report(self):
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Select an image first.")
+            return
+
+        generate_report(self, self.current_image_path, self.metadata_label.text())
+
+
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Basic Frontend")
-        self.setGeometry(200, 200, 1200, 800)
+        self.setGeometry(200, 200, 1700, 900)
 
         self.current_image_path = None
         self.current_pixmap = None
@@ -46,14 +59,12 @@ class DRDOGUI(QMainWindow):
         self.category_history = [] 
         self.last_selected_path = None
         
-        # User Manual Link Configuration
-        # The link has been updated as requested:
+       
         self.user_manual_url = "file:///C:/Users/Lenovo/Desktop/User%20Manual.pdf" 
         
-        # ================= NEW: Toolbar Setup =================
+        
         self._create_toolbar()
 
-        # ================= Main Layout =================
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QGridLayout(self.central_widget)
@@ -78,7 +89,6 @@ class DRDOGUI(QMainWindow):
         section_left.setLayout(vbox_left)
         self.layout.addWidget(section_left, 0, 0, 2, 1)
 
-        # ================= Quadrant Right =================
         # Top-Left: Selected Image
         self.image_label = QLabel("Click a thumbnail to show here")
         self.image_label.setStyleSheet("border: 1px solid gray; min-height: 200px;")
@@ -99,10 +109,21 @@ class DRDOGUI(QMainWindow):
         section_proc.setLayout(vbox_proc)
         self.layout.addWidget(section_proc, 0, 2)
 
-        # Bottom-Left: Categorize
+        self.model_btn = QPushButton("Detect Defect")
+
+        self.layout.addWidget(self.model_btn, 2, 1)
+
+                # Bottom-Left: Categorize
         self.categorize_btn = QPushButton("Categorize (Repair / Accept)")
         self.categorize_btn.clicked.connect(self.categorize_image)
-        
+        self.generate_report_btn = QPushButton("Generate Report")
+        self.generate_report_btn.clicked.connect(self.handle_generate_report)
+        self.layout.addWidget(self.generate_report_btn, 2, 1)
+
+        self.open_reports_btn = QPushButton("Open Reports")
+        self.open_reports_btn.clicked.connect(open_reports_folder)
+        self.layout.addWidget(self.open_reports_btn, 2, 2)
+
         self.category_label = QLabel("Category result will appear here")
         self.category_label.setStyleSheet("border: 1px solid gray; min-height: 50px;")
 
@@ -126,10 +147,33 @@ class DRDOGUI(QMainWindow):
         section_meta.setLayout(vbox_meta)
         self.layout.addWidget(section_meta, 1, 2)
 
+        # ================= New Rightmost Column: Bounding Boxes (column 3) =================
+        # This column is intentionally thin and contains a scrollable list of detected boxes.
+        self.bb_title = QLabel("Bounding Boxes")
+        self.bb_title.setAlignment(Qt.AlignCenter)
+        self.bb_title.setStyleSheet("font-weight: bold; padding: 4px;")
+
+        self.bb_scroll = QScrollArea()
+        self.bb_scroll.setWidgetResizable(True)
+        self.bb_content = QWidget()
+        self.bb_layout = QVBoxLayout(self.bb_content)
+        self.bb_layout.setAlignment(Qt.AlignTop)
+        self.bb_content.setLayout(self.bb_layout)
+        self.bb_scroll.setWidget(self.bb_content)
+
+        vbox_bb = QVBoxLayout()
+        vbox_bb.addWidget(self.bb_title)
+        vbox_bb.addWidget(self.bb_scroll)
+
+        section_bb = QWidget()
+        section_bb.setLayout(vbox_bb)
+        # place it at column 3 spanning both rows
+        self.layout.addWidget(section_bb, 0 , 3, 2,1)
         # Layout proportions
         self.layout.setColumnStretch(0, 1)  # thin left
-        self.layout.setColumnStretch(1, 2)
+        self.layout.setColumnStretch(1, 3)
         self.layout.setColumnStretch(2, 2)
+        self.layout.setColumnStretch(3, 1)
         self.layout.setRowStretch(0, 2)
         self.layout.setRowStretch(1, 1)
 
@@ -446,7 +490,200 @@ class DRDOGUI(QMainWindow):
         }
         self.category_history.append(action)
         print(f"Action recorded: {action}")
+# ================= Bounding Box UI Helpers =================
+    def _clear_bb_list(self):
+        for i in reversed(range(self.bb_layout.count())):
+            widget = self.bb_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
 
+    def _add_bb_item(self, class_name, coords, color_hex):
+        # Each item shows a small color swatch + class label + coordinates text
+        item_widget = QWidget()
+        h = QVBoxLayout()
+        h.setContentsMargins(6, 4, 6, 4)
+        h.setSpacing(8)
+
+        # color swatch
+        swatch = QLabel()
+        swatch.setFixedSize(16, 16)
+        swatch.setStyleSheet(f"background-color: {color_hex}; border: 1px solid #222;")
+        h.addWidget(swatch)
+
+        # class name (colored text)
+        class_lbl = QLabel(class_name)
+        class_lbl.setStyleSheet(f"font-weight: bold; color: {color_hex};")
+        h.addWidget(class_lbl)
+
+        # coordinates
+        coords_lbl = QLabel(f"{coords[0]}, {coords[1]}, {coords[2]}, {coords[3]}")
+        coords_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        h.addWidget(coords_lbl)
+
+        # spacer so items compress nicely in the thin column
+        h.addStretch()
+        item_widget.setLayout(h)
+        self.bb_layout.addWidget(item_widget)
+
+    def display_bounding_boxes(self, boxes):
+        """
+        Accepts a list of boxes where each box is:
+        {"class": str, "coords": [x1,y1,x2,y2], "color": "#RRGGBB"}
+        This updates the rightmost column UI.
+        """
+        # store
+        self.current_bboxes = boxes or []
+        self._clear_bb_list()
+
+        if not boxes:
+            empty_lbl = QLabel("No bounding boxes detected.")
+            empty_lbl.setStyleSheet("color: gray; padding: 6px;")
+            self.bb_layout.addWidget(empty_lbl)
+            return
+
+        for box in boxes:
+            cls = box.get("class", "unk")
+            coords = box.get("coords", ["N/A", "N/A", "N/A", "N/A"])
+            color = box.get("color", "#AAAAAA")
+            self._add_bb_item(cls, coords, color)
+
+    # ================= Categorization / Detection =================
+    def categorize_image(self):
+        if not self.current_image_path:
+            self.category_label.setText("No image selected!")
+            return
+
+        # Random categorize as before
+        category = random.choice(["Repair", "Accept"])
+        self.category_label.setText(f"Result: {category}")
+
+        # Record the action
+        action = {
+            "path": self.current_image_path,
+            "category": category
+        }
+        self.category_history.append(action)
+        print(f"Action recorded: {action}")
+
+        # After categorization, attempt to detect bboxes using a model if available,
+        # otherwise generate a simulated example for demonstration.
+        boxes = []
+        try:
+            # Try to import a user-provided detection function.
+            # Expected function signature: detect_bboxes(image_path) -> list of dicts
+            # with keys 'class', 'coords', 'color' (color optional)
+            from model import detect_bboxes  # user should provide this module if available
+            boxes = detect_bboxes(self.current_image_path)
+            print("Detected boxes via model.detect_bboxes()")
+        except Exception as e:
+            # If the user model isn't present, make up a few example boxes so UI is usable.
+            print(f"No external model detected or model failed ({e}). Using simulated boxes.")
+            # Simulate up to 3 boxes with random-ish coords scaled to original image size (if known)
+            w, h = (self.original_size if isinstance(self.original_size, tuple) else (640, 480))
+            if not (isinstance(w, int) and isinstance(h, int)):
+                w, h = 640, 480
+            classes = ["scratch", "dent", "misalign"]
+            palette = ["#FF4D4D", "#FFA500", "#4DA6FF"]
+            for i in range(random.randint(1, 3)):
+                x1 = random.randint(0, int(w * 0.6))
+                y1 = random.randint(0, int(h * 0.6))
+                x2 = x1 + random.randint(20, int(w * 0.3))
+                y2 = y1 + random.randint(20, int(h * 0.3))
+                boxes.append({
+                    "class": classes[i % len(classes)],
+                    "coords": [x1, y1, min(x2, w), min(y2, h)],
+                    "color": palette[i % len(palette)]
+                })
+
+        # Update the bounding boxes column UI
+        self.display_bounding_boxes(boxes)
+
+        # Optionally draw boxes on the displayed preview (scaled) so user sees approximate positions
+        self._overlay_boxes_on_preview(boxes)
+
+    def _overlay_boxes_on_preview(self, boxes):
+        """
+        Draws bounding boxes on a copy of the current pixmap to show approximate positions.
+        This uses the scaled pixmap currently shown in the image_label, so coordinates are scaled.
+        """
+        if not self.current_pixmap or not boxes:
+            return
+
+        pixmap = self.current_pixmap
+        # create a copy to paint on
+        painted = QPixmap(pixmap)
+        painter = QPainter(painted)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Determine scale from original image size to displayed pixmap size
+        try:
+            orig_w, orig_h = self.original_size
+            disp_pixmap = self.image_label.pixmap()
+            if disp_pixmap:
+                disp_w = disp_pixmap.width()
+                disp_h = disp_pixmap.height()
+            else:
+                disp_w = painted.width()
+                disp_h = painted.height()
+
+            sx = disp_w / max(orig_w, 1)
+            sy = disp_h / max(orig_h, 1)
+        except Exception:
+            sx = sy = 1.0
+
+        for box in boxes:
+            coords = box.get("coords", [0, 0, 0, 0])
+            color_hex = box.get("color", "#FF0000")
+            try:
+                color = QColor(color_hex)
+            except Exception:
+                color = QColor("#FF0000")
+            painter.setPen(color)
+            # scale coords
+            x1 = int(coords[0] * sx)
+            y1 = int(coords[1] * sy)
+            x2 = int(coords[2] * sx)
+            y2 = int(coords[3] * sy)
+            painter.drawRect(x1, y1, max(1, x2 - x1), max(1, y2 - y1))
+
+        painter.end()
+
+        # Resize the painted pixmap to label keeping aspect ratio
+        scaled_painted = painted.scaled(
+            self.image_label.size(),
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation
+        )
+        self.image_label.setPixmap(scaled_painted)
+
+    def closeEvent(self, event):
+        # Ensure we save state on close
+        try:
+            self.save_progress()
+        except Exception:
+            pass
+        super().closeEvent(event)
+
+def SegentationModels(self):
+    if not self.current_image_path:
+        QMessageBox.warning(self, "Error", "No image selected!")
+        return
+
+    try:
+        # Choose one of your models
+        model_choice = "segformer"  # or "unet" / "unetpp"
+        result = self.seg_models.segment(self.current_image_path, model_choice)
+
+        # Save and display result
+        output_path = os.path.join(self.current_folder, "segmented_output.png")
+        result.save(output_path)
+
+        self.output_label.setPixmap(QPixmap(output_path).scaledToWidth(400, Qt.SmoothTransformation))
+        self.category_label.setText(f"Segmentation done using {model_choice.upper()}")
+        print(f"Saved output to {output_path}")
+    except Exception as e:
+        QMessageBox.critical(self, "Segmentation Error", str(e))
+        print("Error:", e)
 
 def main():
     # Make sure PIL/Pillow is installed before running!
