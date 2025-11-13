@@ -25,30 +25,42 @@ class ClickableLabel(QLabel):
     def __init__(self, path, parent=None):
         super().__init__(parent)
         self.path = path
+        self.seg_models = SegmentationModels(device="cpu")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self.path)
 
-    
+    def run_segmentation(self):
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Select an image first, Oshee.")
+            return
+
+        try:
+            # Pick your default model
+            model_name = "segformer"   # or "unet" or "unetpp"
+
+            mask_img = self.seg_models.segment(self.current_image_path, model_name)
+
+            output_path = os.path.join(self.current_folder, "segmented_output.png")
+            mask_img.save(output_path)
+
+            # show the output
+            self.output_label.setPixmap(
+                QPixmap(output_path).scaledToWidth(400, Qt.SmoothTransformation)
+            )
+
+            self.category_label.setText(f"Segmentation done using {model_name.upper()}")
+            print(f"Saved output to {output_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Segmentation Error", str(e))
+            print("Error:", e)
+
+
+           
 class DRDOGUI(QMainWindow):
     SAVE_FILE = "app_state.json"
-    def run_all_models(self):
-        if not self.current_image_path:
-            QMessageBox.warning(self, "No Image", "Select an image first.")
-            return
-    
-        try:
-            from models import run_all_models
-            result = run_all_models(self.current_image_path)
-    
-            # Show in output box
-            self.output_label.setText(str(result))
-    
-            print("Model results:", result)
-        except Exception as e:
-            QMessageBox.critical(self, "Model Error", str(e))
-            print("Error running models:", e)
 
     def handle_generate_report(self):
         if not self.current_image_path:
@@ -105,21 +117,22 @@ class DRDOGUI(QMainWindow):
         section_left.setLayout(vbox_left)
         self.layout.addWidget(section_left, 0, 0, 2, 1)
 
-                # Top-Left: Selected Image + Detect Defect Button
+        # Top-Left: Selected Image + Detect Defect Button
         selected_img_box = QVBoxLayout()
-        
+
         self.image_label = QLabel("Click a thumbnail to show here")
         self.image_label.setStyleSheet("border: 1px solid gray; min-height: 200px;")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setScaledContents(True)
-        
+
         selected_img_box.addWidget(self.image_label)
-        
+
         # === DETECT DEFECT BUTTON HERE ===
         self.model_btn = QPushButton("Detect Defect")
-        self.model_btn.clicked.connect(self.run_all_models)   # <-- you will define this method
+        self.model_btn.clicked.connect(self.run_segmentation)
+  
         selected_img_box.addWidget(self.model_btn)
-        
+
         # Place this compound widget into the grid
         img_section = QWidget()
         img_section.setLayout(selected_img_box)
@@ -602,7 +615,7 @@ class DRDOGUI(QMainWindow):
             # Try to import a user-provided detection function.
             # Expected function signature: detect_bboxes(image_path) -> list of dicts
             # with keys 'class', 'coords', 'color' (color optional)
-            from model import detect_bboxes  # user should provide this module if available
+            from models import detect_bboxes  # user should provide this module if available
             boxes = detect_bboxes(self.current_image_path)
             print("Detected boxes via model.detect_bboxes()")
         except Exception as e:
