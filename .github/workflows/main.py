@@ -33,6 +33,22 @@ class ClickableLabel(QLabel):
     
 class DRDOGUI(QMainWindow):
     SAVE_FILE = "app_state.json"
+    def run_all_models(self):
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Select an image first.")
+            return
+    
+        try:
+            from models import run_all_models
+            result = run_all_models(self.current_image_path)
+    
+            # Show in output box
+            self.output_label.setText(str(result))
+    
+            print("Model results:", result)
+        except Exception as e:
+            QMessageBox.critical(self, "Model Error", str(e))
+            print("Error running models:", e)
 
     def handle_generate_report(self):
         if not self.current_image_path:
@@ -89,12 +105,26 @@ class DRDOGUI(QMainWindow):
         section_left.setLayout(vbox_left)
         self.layout.addWidget(section_left, 0, 0, 2, 1)
 
-        # Top-Left: Selected Image
+                # Top-Left: Selected Image + Detect Defect Button
+        selected_img_box = QVBoxLayout()
+        
         self.image_label = QLabel("Click a thumbnail to show here")
         self.image_label.setStyleSheet("border: 1px solid gray; min-height: 200px;")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setScaledContents(True)
-        self.layout.addWidget(self.image_label, 0, 1)
+        
+        selected_img_box.addWidget(self.image_label)
+        
+        # === DETECT DEFECT BUTTON HERE ===
+        self.model_btn = QPushButton("Detect Defect")
+        self.model_btn.clicked.connect(self.run_all_models)   # <-- you will define this method
+        selected_img_box.addWidget(self.model_btn)
+        
+        # Place this compound widget into the grid
+        img_section = QWidget()
+        img_section.setLayout(selected_img_box)
+        self.layout.addWidget(img_section, 0, 1)
+
 
         # Top-Right: Process
         self.process_btn = QPushButton("Process (Not Implemented)")
