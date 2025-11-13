@@ -3,6 +3,8 @@ import os
 import json 
 import random
 from PyQt5.QtGui import QPainter, QColor
+from PyQt5.QtWidgets import QComboBox
+
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel,
@@ -31,6 +33,50 @@ class ClickableLabel(QLabel):
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self.path)
 
+    
+
+
+           
+class DRDOGUI(QMainWindow):
+    SAVE_FILE = "app_state.json"
+
+    def handle_generate_report(self):
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Select an image first.")
+            return
+
+        generate_report(self, self.current_image_path, self.metadata_label.text())
+    def run_segmentation(self):
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Select an image first, Oshee.")
+            return
+
+        try:
+            # READ SELECTED MODEL NAME
+            model_name = self.model_dropdown.currentText()
+
+            # RUN THAT MODEL ONLY
+            mask_img = self.seg_models.segment(self.current_image_path, model_name)
+
+            # SAVE OUTPUT
+            output_path = os.path.join(self.current_folder, f"{model_name}_output.png")
+            mask_img.save(output_path)
+
+            # DISPLAY OUTPUT
+            self.output_label.setPixmap(
+                QPixmap(output_path).scaledToWidth(400, Qt.SmoothTransformation)
+            )
+
+            self.category_label.setText(
+                f"Segmentation done using {model_name.upper()}"
+            )
+
+            print(f"{model_name} output saved to:", output_path)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Segmentation Error", str(e))
+            print("Error:", e)
+
     def run_segmentation(self):
         if not self.current_image_path:
             QMessageBox.warning(self, "No Image", "Select an image first, Oshee.")
@@ -57,24 +103,13 @@ class ClickableLabel(QLabel):
             QMessageBox.critical(self, "Segmentation Error", str(e))
             print("Error:", e)
 
-
-           
-class DRDOGUI(QMainWindow):
-    SAVE_FILE = "app_state.json"
-
-    def handle_generate_report(self):
-        if not self.current_image_path:
-            QMessageBox.warning(self, "No Image", "Select an image first.")
-            return
-
-        generate_report(self, self.current_image_path, self.metadata_label.text())
-
-
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Basic Frontend")
         self.setGeometry(200, 200, 1700, 900)
+        from models import SegmentationModels
+        self.seg_models = SegmentationModels(device="cpu")
+
 
         self.current_image_path = None
         self.current_pixmap = None
@@ -124,19 +159,22 @@ class DRDOGUI(QMainWindow):
         self.image_label.setStyleSheet("border: 1px solid gray; min-height: 200px;")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setScaledContents(True)
-
         selected_img_box.addWidget(self.image_label)
 
-        # === DETECT DEFECT BUTTON HERE ===
+        # === MODEL DROPDOWN ===
+        self.model_dropdown = QComboBox()
+        self.model_dropdown.addItems(["unet", "unetpp", "segformer"])
+        selected_img_box.addWidget(self.model_dropdown)
+
+        # === DETECT DEFECT BUTTON ===
         self.model_btn = QPushButton("Detect Defect")
         self.model_btn.clicked.connect(self.run_segmentation)
-  
         selected_img_box.addWidget(self.model_btn)
 
-        # Place this compound widget into the grid
         img_section = QWidget()
         img_section.setLayout(selected_img_box)
         self.layout.addWidget(img_section, 0, 1)
+
 
 
         # Top-Right: Process
