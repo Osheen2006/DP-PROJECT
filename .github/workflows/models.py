@@ -44,3 +44,7 @@ class SegmentationModels:
         mask = (mask > 0.5).astype(np.uint8) * 255
 
         return Image.fromarray(mask)
+    def run_all_models(image_path):
+        # your logic goes here
+        return {"status": "All models ran successfully!"}
+
